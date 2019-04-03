@@ -10,7 +10,7 @@ width = 224
 height = 224
 pic_size = 224*224
 
-mb_size = 128
+mb_size = 100
 Z_dim = 100
 
 
@@ -26,16 +26,15 @@ def sample_Z(m, n):
 
 def linear(input_, output_dim, name, stddev=0.02):
     with tf.name_scope(name):
-        print(input_.shape[-1])
-        print(input_.shape.as_list()[-1])
+        print('liner input_', input_.shape[-1])
+        print('liner input_2', input_.shape.as_list()[-1])
         matrix = tf.Variable(tf.random_normal(shape=[input_.shape.as_list()[-1], output_dim], stddev=stddev, dtype=tf.float32))
         baise = tf.Variable(tf.zeros([output_dim]))
         return tf.matmul(input_, matrix) + baise
 
 def batch_norm(x, name, train=True, epsilon=1e-5, momentum=0.9):
-    tf.contrib.layers.batch_norm(x, decay=momentum, updates_collections=None, epsilon=epsilon,
+    return tf.contrib.layers.batch_norm(x, decay=momentum, updates_collections=None, epsilon=epsilon,
                                    scale=True, is_training=train, scope=name)
-
 
 img_height = height
 img_width = width
@@ -55,7 +54,7 @@ z_dim = 100
 
 def deconvolution(input_, output_dim, name, k_h = 5, k_w=5, s_h=2, s_w =2, stddev=0.02):
     with tf.name_scope(name):
-        w = tf.Variable(tf.truncated_normal(shape=[k_h, k_w, output_dim[-1], input_.shape[-1]], stddev=stddev, dtype=tf.float32))
+        w = tf.Variable(tf.truncated_normal(shape=[k_h, k_w, output_dim[-1], input_.shape.as_list()[-1]], stddev=stddev, dtype=tf.float32))
         deconv = tf.nn.conv2d_transpose(input_, w, output_shape=output_dim, strides=[1, s_h, s_w, 1])
         b= tf.Variable(tf.zeros([output_dim[-1]]))
         return tf.reshape(tf.nn.bias_add(deconv, b), deconv.shape)
@@ -72,7 +71,14 @@ def generator(z):
     s_h2, s_w2 = int(s_h / 2), int(s_w / 2)
     s_h4, s_w4 = int(s_h / 4), int(s_w / 4)
 
-    h0 = tf.nn.relu(batch_norm(linear(z, gfc_dim, name='g_fc'), name='g_fc_bn'))
+    # h0 = tf.nn.relu(batch_norm(linear(z, gfc_dim, name='g_fc'), name='g_fcb1'))
+    print('--z--', z)
+    ll = linear(z, gfc_dim, name='g_fc')
+    print('----', ll)
+    bn = batch_norm(ll, name='g_fc_bn')
+    print('----bb ', bn)
+
+    h0 = tf.nn.relu(bn)
 
     h1 = tf.nn.relu(batch_norm(linear(h0, gf_dim * 2 * s_h4 * s_w4, name='g_fc2'), name='g_fc2_bn'))
     h1 = tf.reshape(h1, [batch_size, s_h4, s_w4, gf_dim * 2])
@@ -100,7 +106,8 @@ def discriminator(x, x_gen):
     :param x:   (784)
     :return:    (1); (1)
     """
-
+    print(x)
+    print(x_gen)
     x = tf.concat([x, x_gen], 0)
 
     h0 = lrelu(conv2d(x, c_dim, name='d_conv'))
@@ -133,8 +140,9 @@ def plot(samples):
     return fig
 
 
-Z = tf.placeholder(tf.float32, shape=[None, 100])
-X = tf.placeholder(tf.float32, shape=[None, pic_size])
+Z = tf.placeholder(tf.float32, shape=[None, 100], name='z')
+# X = tf.placeholder(tf.float32, shape=[None, pic_size])
+X = tf.placeholder(tf.float32,shape=[batch_size, img_height, img_width, c_dim], name='input_X')
 
 G_sample = generator(Z) # 假图
 
@@ -178,8 +186,8 @@ def read_and_decode(filename):
 
     return image
 
-image = read_and_decode('./tfrecords/train.tfrecord')
-image_batch = tf.train.shuffle_batch([image], batch_size=16, capacity = 50, min_after_dequeue=10)
+image = read_and_decode('./tfrecords/train_3.tfrecord')
+image_batch = tf.train.shuffle_batch([image], batch_size=mb_size, capacity = 50, min_after_dequeue=10)
 
 with tf.Session() as sess:
 
@@ -193,9 +201,9 @@ with tf.Session() as sess:
     i = 0
     for it in range(20000):
 
-        if it % 20 == 0:
-            samples = sess.run(G_sample, feed_dict={Z: sample_Z(16, Z_dim)})
-
+        if (it+1) % 20 == 0:
+            samples = sess.run(G_sample, feed_dict={Z: sample_Z(mb_size, Z_dim)})
+            samples = samples[:16]
             fig = plot(samples)
             plt.savefig('out_g/{}.png'.format(str(i).zfill(3)), bbox_inches='tight')
             i += 1
@@ -203,9 +211,9 @@ with tf.Session() as sess:
 
         b_image = sess.run(image_batch)
 
-        b_image = np.reshape(b_image, (-1, width * height))
-        _, D_loss_curr = sess.run([D_solver, D_loss], feed_dict={X: b_image, Z: sample_Z(mb_size, Z_dim)})
-        _, G_loss_curr = sess.run([G_solver, G_loss], feed_dict={Z: sample_Z(mb_size, Z_dim)})
+        b_image = np.reshape(b_image, (-1, width, height, 1))
+        _, D_loss_curr = sess.run([D_solver, d_loss], feed_dict={X: b_image, Z: sample_Z(mb_size, Z_dim)})
+        _, G_loss_curr = sess.run([G_solver, g_loss], feed_dict={X: b_image, Z: sample_Z(mb_size, Z_dim)})
 
 
         #每迭代2000次输出迭代数、生成器损失和判别器损失
