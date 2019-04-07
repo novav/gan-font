@@ -92,7 +92,7 @@ def generator(z):
     print('gen_h_2', h_2)
 
     # return tf.nn.sigmoid(deconvolution(h_2, [batch_size,  s_h2,    s_w,    c_dim],name='g_dc2'))
-    return tf.nn.sigmoid(deconvolution(h_2, [batch_size,  s_h,    s_w,    c_dim],name='g_dc2'))
+    return tf.nn.sigmoid(deconvolution(h_2, [batch_size,  s_h,    s_w,    1],name='g_dc2'))
 
 def lrelu(x,leak=0.2):
     '''参考Rectier Nonlinearities Improve Neural Network Acoustic Models'''
@@ -153,7 +153,7 @@ def plot(samples):
 
 Z = tf.placeholder(tf.float32, shape=[None, 100], name='z')
 # X = tf.placeholder(tf.float32, shape=[None, pic_size])
-X = tf.placeholder(tf.float32,shape=[batch_size, img_height, img_width, c_dim], name='input_X')
+X = tf.placeholder(tf.float32,shape=[batch_size, img_height, img_width, 1], name='input_X')
 
 G_sample = generator(Z) # 假图
 
@@ -255,6 +255,7 @@ with tf.Session(config=config) as sess:
         b_image = sess.run(image_batch)
 
         b_image = np.reshape(b_image, (-1, width, height, 1))
+
         _, D_loss_curr, step = sess.run([D_solver, d_loss, global_step], feed_dict={X: b_image, Z: sample_Z(mb_size, Z_dim)})
         _, G_loss_curr = sess.run([G_solver, g_loss], feed_dict={X: b_image, Z: sample_Z(mb_size, Z_dim)})
 
